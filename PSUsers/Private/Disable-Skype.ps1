@@ -1,5 +1,6 @@
 function Disable-Skype {
-    [CmdletBinding(ConfirmImpact='Medium')]
+    [CmdletBinding(SupportsShouldProcess = $true,
+                   ConfirmImpact='Medium')]
 
     [OutputType([String])]
     Param (

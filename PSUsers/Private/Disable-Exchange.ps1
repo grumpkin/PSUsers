@@ -17,7 +17,7 @@ function Disable-Exchange {
 			
 		[Parameter(Mandatory = $true,
 				   ParameterSetName = 'Forward')]
-		[ValidatePattern('^[A-Z0-9._%+-]+@horizonnorth.ca$')]
+		#[ValidatePattern('^[A-Z0-9._%+-]+@horizonnorth.ca$')]
         #[ValidateScript({if($_ -match '^[A-Z0-9._%+-]+@horizonnorth.ca$') {$true}})]
 		[String]$ForwardingAddress,
 			
@@ -31,22 +31,22 @@ function Disable-Exchange {
 		[string]$BlockDistributionGroup = 'Disabled Users',
 			
 		[Parameter()]
-		[bool]$Online = $true
+		[Switch]$OnPremise
 	)
 		
 	BEGIN 
 	{
-		if ($Online)
-		{
-			Write-Verbose -Message 'USERS: Creating and importing Exchange Online session'
-			$ExSession = Get-ExchangeOnlineSession -Verbose:$Verbose
-			Import-PSSession -Session $ExSession -DisableNameChecking -AllowClobber  *> $null
-		}
-		else
+		if ($OnPremise)
 		{
 			Write-Verbose -Message 'USERS: Creating and importing Exchane On-Premise session'
 			$ExSession = New-PSSession -ConnectionUri http://hnlcgy-vmexch01/powershell -ConfigurationName Microsoft.Exchange
 			Import-PSSession -Session $ExSession -DisableNameChecking -AllowClobber *> $null
+		}
+		else
+		{
+			Write-Verbose -Message 'USERS: Creating and importing Exchange Online session'
+			$ExSession = Get-ExchangeOnlineSession -Verbose:$Verbose
+			Import-PSSession -Session $ExSession -DisableNameChecking -AllowClobber  *> $null
 		}
 	}
 	PROCESS
@@ -66,7 +66,20 @@ function Disable-Exchange {
 			{
 				Disable-UMMailbox -Identity $Identity -KeepProperties $false -Confirm:$false > $null
 			}
-			if ($Mailbox -and $Online)
+			if ($Mailbox -and $OnPremise)
+			{
+				Set-Mailbox -Identity $Identity -HiddenFromAddressListsEnabled $true
+				#New-MoveRequest -Identity $SamAccountName -TargetDatabase 'DisabledUsers' > $null
+					
+				# Block all currently listed ActiveSync devices
+				$Devices = Get-ActiveSyncDeviceStatistics –Mailbox $Identity | Select DeviceID
+				if ($Devices) {	Set-CASMailbox -Identity $Identity -ActiveSyncBlockedDeviceIDs @{ Add = $Devices.DeviceID } }
+					
+				# Disable all services with access to mailbox (EAS,EWS,OWA,MAPI)
+				Set-CASMailbox -Identity $Identity -ActiveSyncEnabled $false -OWAEnabled $false -EwsEnabled $false `
+								-ECPEnabled $false -PopEnabled $false -ImapEnabled $false -MAPIEnabled $false
+			}
+			elseif ($Mailbox)
 			{
 				Set-Mailbox -Identity $Identity -Type Shared
 				Set-ADUser -Identity $Identity -Replace @{msExchHideFromAddressLists=$true}
@@ -80,19 +93,6 @@ function Disable-Exchange {
 				Set-CASMailbox -Identity $Identity -ActiveSyncEnabled $false -OWAEnabled $false -EwsEnabled $false `
 								-PopEnabled $false -ImapEnabled $false -EwsAllowMacOutlook $false -MAPIEnabled $false `
 								-OWAforDevicesEnabled $false -EwsAllowOutlook $false -UniversalOutlookEnabled $false
-			}
-			elseif ($Mailbox)
-			{
-				Set-Mailbox -Identity $Identity -HiddenFromAddressListsEnabled $true
-				#New-MoveRequest -Identity $SamAccountName -TargetDatabase 'DisabledUsers' > $null
-					
-				# Block all currently listed ActiveSync devices
-				$Devices = Get-ActiveSyncDeviceStatistics –Mailbox $Identity | Select DeviceID
-				if ($Devices) {	Set-CASMailbox -Identity $Identity -ActiveSyncBlockedDeviceIDs @{ Add = $Devices.DeviceID } }
-					
-				# Disable all services with access to mailbox (EAS,EWS,OWA,MAPI)
-				Set-CASMailbox -Identity $Identity -ActiveSyncEnabled $false -OWAEnabled $false -EwsEnabled $false `
-								-ECPEnabled $false -PopEnabled $false -ImapEnabled $false -MAPIEnabled $false
 			}
 				
 			if ($ForwardingAddress)
