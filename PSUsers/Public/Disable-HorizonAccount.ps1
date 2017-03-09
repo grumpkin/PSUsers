@@ -36,11 +36,15 @@ function Disable-HorizonAccount {
     )
 
     BEGIN {
-        if ($OnPremise) {
-            $OrganizationalUnit = 'OU=Disabled Users, DC=hnl, DC=local'
-        }
         if ($PsCmdlet.ParameterSetName -eq 'String') {
             $ADUser = Get-HorizonUser $SamAccountName
+        }
+
+        $CommonParams = @{
+            Verbose = if ($PSBoundParameters['Verbose']) {$PSBoundParameters['Verbose']} else {$false}
+            Confirm = if ($PSBoundParameters['Confirm']) {$PSBoundParameters['Confirm']} else {$false}
+            Debug = if ($PSBoundParameters['Debug']) {$PSBoundParameters['Debug']} else {$false}
+            WhatIf = if ($PSBoundParameters['WhatIf']) {$PSBoundParameters['WhatIf']} else {$false}
         }
     }
 
@@ -49,10 +53,10 @@ function Disable-HorizonAccount {
 
         #TODO: figure out what to put for the first parameter. it shows when the user uses the WhatIf parameter
         if ($PSCmdlet.ShouldProcess('', 'Disable the user listed above', 'Disable Selected User')) {
-            Disable-Account -ADUser $ADUser @PSBoundParameters
-            Save-Information -ADUser $ADUser @PSBoundParameters
-            Disable-Skype -SamAccountName $ADUser.UserPrincipalName -Delete @PSBoundParameters
-            Disable-Exchange -Identity $ADUser.SamAccountName @PSBoundParameters
+            Disable-Account -ADUser $ADUser -OnPremise:$OnPremise @CommonParams
+            Save-Information -ADUser $ADUser @CommonParams
+            Disable-Skype -SamAccountName $ADUser.UserPrincipalName -Delete @CommonParams
+            Disable-Exchange @PSBoundParameters
             Write-Host "User $($ADUser.Name) has been disabled"
         }
 
